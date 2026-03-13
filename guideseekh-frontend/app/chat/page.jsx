@@ -6,6 +6,7 @@ import {
   X, Trash2, ChevronLeft, ChevronRight, Bell, GraduationCap, Plus
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 
 // The brand accent color
 const ACCENT = "#FF5500";
@@ -65,13 +66,13 @@ const TypewriterMessage = ({ text, messageId, isNew }) => {
     };
   }, [text, messageId, isNew]);
 
+  // We append a simple block char for the typing cursor so it stays inline with formatted Markdown
   return (
-    <span>
-      {displayedText}
-      {showCursor && (
-        <span className="inline-block w-[4px] h-[1em] ml-1 bg-white animate-pulse align-middle rounded-sm" />
-      )}
-    </span>
+    <div className="markdown-body w-full overflow-hidden prose prose-invert prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2 max-w-none break-words">
+      <ReactMarkdown>
+        {displayedText + (showCursor ? " ▌" : "")}
+      </ReactMarkdown>
+    </div>
   );
 };
 
@@ -261,9 +262,28 @@ export default function ChatPage() {
       const chats = await fetch(`${apiBaseUrl}/api/chat/user/${userId}`).then((r) => r.json()).catch(() => []);
       setChatList(chats || []);
       const updated = (chats || []).find((c) => c.id === chatId);
+      
       if (updated?.topic) {
+        // If this was the first message, topic just transitioned from empty to something
+        const isFirstMessage = !topic;
+        
         setTopic(updated.topic);
         sessionStorage.setItem("chatTopic", updated.topic);
+
+        // --- INTERRUPT LEVEL FEATURE ---
+        // If this is a brand new chat (first message just sent), auto-popup the reminder 
+        // modal after 60 seconds if they haven't explicitly set one already.
+        if (isFirstMessage) {
+          // Capture the exact chatId at this moment
+          const currentChatId = chatId;
+          setTimeout(() => {
+            // Check if they haven't set a reminder yet AND are still on the exact same chat
+            const hasReminder = localStorage.getItem(`reminder_set_${currentChatId}`);
+            if (!hasReminder && sessionStorage.getItem("chatId") === currentChatId) {
+              setShowReminderModal(true);
+            }
+          }, 60000); // 1 minute
+        }
       }
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
@@ -354,6 +374,10 @@ export default function ChatPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Failed to create reminder");
+      
+      // Mark reminder as set for this chat so it doesn't auto-popup later
+      localStorage.setItem(`reminder_set_${chatId}`, "true");
+
       setShowReminderModal(false);
       setReminderDateTime(""); setReminderTime(""); setReminderTimeEnd(""); setSelectedDays([]); setRecurrenceType("daily");
       alert("Reminder created!");
@@ -764,7 +788,7 @@ export default function ChatPage() {
                       {/* Content */}
                       <div className={`flex-1 min-w-0 ${message.role === "user" ? "flex justify-end" : "pt-0.5"}`}>
                         {message.role === "bot" ? (
-                          <div className="text-gray-100 text-[15px] leading-[1.9] prose prose-invert prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2 max-w-none break-words">
+                          <div className="text-gray-100 text-[15px] leading-[1.9] w-full">
                              <div className="sm:hidden w-6 h-6 mb-2 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-lg shadow-[#FF5500]/10">
                                 <Sparkles className="w-3.5 h-3.5" />
                               </div>
