@@ -1,0 +1,401 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "twilio-reply",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Twilio Reply Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-528, 464],
+      "id": "d0285682-6532-4698-8d88-7336aff76092",
+      "webhookId": "8d270f5a-3db8-4e37-b076-6b466377d3d1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/xml"
+              }
+            ]
+          }
+        }
+      },
+      "name": "Reply to Twilio",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [-336, 624],
+      "id": "ddb4cd23-928d-4cca-bb86-77b974f9e487"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "phone",
+              "value": "={{$json[\"body\"][\"From\"].replace(\"whatsapp:\",\"\").replace(/^\\+/,\"\").replace(/\\D/g,\"\")}}"
+            },
+            {
+              "name": "user_answer",
+              "value": "={{$json[\"body\"][\"Body\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extract Reply",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [-336, 464],
+      "id": "6ad7f1f2-68a5-461f-94ff-f97aedc709ff"
+    },
+    {
+      "parameters": {
+        "url": "=https://221c-103-92-103-41.ngrok-free.app/api/quiz/state",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{$('Extract Reply').item.json[\"phone\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Quiz State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [64, 384],
+      "id": "d347c0cb-d7ab-4b8d-b6da-c65b55d9cf8f"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://221c-103-92-103-41.ngrok-free.app/api/quiz/answer-n8n",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "quiz_id",
+              "value": "={{$json[\"quiz_id\"]}}"
+            },
+            {
+              "name": "order",
+              "value": "={{$json[\"current_order\"]}}"
+            },
+            {
+              "name": "answer",
+              "value": "={{$('Extract Reply').item.json[\"user_answer\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Submit Answer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [272, 384],
+      "id": "fa12e440-ff05-4550-bf87-25c5dd3ed2a7"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[\"is_last\"]}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Last?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [480, 384],
+      "id": "f8415aa3-3fc5-40ee-8578-7a7138df5242"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{\"whatsapp:+91\" + $('Extract Reply').item.json[\"phone\"].replace(/^91/,\"\")}}"
+            },
+            {
+              "name": "From",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json[\"feedback_msg\"] + $json[\"final_msg\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send Final Score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [672, 304],
+      "id": "d5943b4b-87f5-4223-8357-024beae7113c",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "daV9K7ZcVqhDg6Ba",
+          "name": "Unnamed credential 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://221c-103-92-103-41.ngrok-free.app/quiz/question",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "quiz_id",
+              "value": "={{$('Get Quiz State').item.json[\"quiz_id\"]}}"
+            },
+            {
+              "name": "order",
+              "value": "={{$('Submit Answer').item.json[\"next_order\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get Next Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [672, 464],
+      "id": "3d25cd2d-c286-45e1-810e-09a535e968cc"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{\"whatsapp:+91\" + $('Extract Reply').item.json[\"phone\"].replace(/^91/,\"\")}}"
+            },
+            {
+              "name": "From",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "name": "Body",
+              "value": "={{$('Submit Answer').item.json[\"feedback_msg\"] + \"\\n\\n\" + $json[\"formatted_msg\"].replace(/\\\\n/g, \"\\n\")}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send Feedback + Next Q",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [880, 464],
+      "id": "6cf073ac-d3b9-4614-929f-de288938a6cd",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "U1PjVKTkeSYGuHP6",
+          "name": "Unnamed credential 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{\"whatsapp:+91\" + $('Extract Reply').item.json[\"phone\"].replace(/^91/,\"\")}}"
+            },
+            {
+              "name": "From",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "name": "Body",
+              "value": "⏭️ Quiz skipped! See you next time 👋"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send Skip Msg",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [64, 576],
+      "id": "a79e59bf-8b22-4d99-8c74-a35536703df4",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "dpH9TivpLb74J1Cp",
+          "name": "Unnamed credential 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quiz-start",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Quiz Start Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-80, 96],
+      "id": "6847be17-ef63-454f-92fc-371a6b77b9e6",
+      "webhookId": "dd8e4076-9dac-463c-9dcd-1f7a51576d9c"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://221c-103-92-103-41.ngrok-free.app/api/quiz/state-start",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "quiz_id",
+              "value": "={{$json[\"body\"][\"quiz_id\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Mark Quiz InProgress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [112, 96],
+      "id": "41f3893e-6507-48ce-8837-c1f6bd0fc7e3"
+    },
+    {
+      "parameters": {
+        "url": "=https://221c-103-92-103-41.ngrok-free.app/api/quiz/question",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "quiz_id",
+              "value": "={{$('Quiz Start Webhook').item.json[\"body\"][\"quiz_id\"]}}"
+            },
+            {
+              "name": "order",
+              "value": "=1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Get First Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [320, 96],
+      "id": "485c16af-8d49-431f-a9b4-05ef6967fc23"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/YOUR_TWILIO_ACCOUNT_SID/Messages.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{\"whatsapp:+91\" + $('Quiz Start Webhook').item.json[\"body\"][\"phone\"].replace(/^whatsapp:/,\"\").replace(/^\\+/,\"\").replace(/\\D/g,\"\").replace(/^91/,\"\")}}"
+            },
+            {
+              "name": "From",
+              "value": "whatsapp:+14155238886"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json[\"formatted_msg\"].replace(/\\\\n/g, \"\\n\")}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Send First Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [512, 96],
+      "id": "f9cbee3a-c260-46e8-9ebe-56ef9dfd596c",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "fvisVcFweBhYpjBg",
+          "name": "Unnamed credential"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Twilio Reply Webhook": {
+      "main": [[
+        { "node": "Reply to Twilio", "type": "main", "index": 0 },
+        { "node": "Extract Reply", "type": "main", "index": 0 }
+      ]]
+    },
+    "Extract Reply": {
+      "main": [[{ "node": "Get Quiz State", "type": "main", "index": 0 }]]
+    },
+    "Get Quiz State": {
+      "main": [[{ "node": "Submit Answer", "type": "main", "index": 0 }]]
+    },
+    "Submit Answer": {
+      "main": [[{ "node": "Is Last?", "type": "main", "index": 0 }]]
+    },
+    "Is Last?": {
+      "main": [
+        [{ "node": "Send Final Score", "type": "main", "index": 0 }],
+        [{ "node": "Get Next Question", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Next Question": {
+      "main": [[{ "node": "Send Feedback + Next Q", "type": "main", "index": 0 }]]
+    },
+    "Quiz Start Webhook": {
+      "main": [[{ "node": "Mark Quiz InProgress", "type": "main", "index": 0 }]]
+    },
+    "Mark Quiz InProgress": {
+      "main": [[{ "node": "Get First Question", "type": "main", "index": 0 }]]
+    },
+    "Get First Question": {
+      "main": [[{ "node": "Send First Question", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "1e436aa0badd6cacee743a83ebb40b559d6257e429c1bc9b43edc84caeb879ae"
+  }
+}

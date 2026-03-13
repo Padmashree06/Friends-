@@ -150,6 +150,24 @@ func ConnectDatabase() {
 		log.Fatal("Failed creating chat_topic_state table:", err)
 	}
 
+	// Create whatsapp_quiz_sessions table
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS whatsapp_quiz_sessions (
+			id SERIAL PRIMARY KEY,
+			phone TEXT NOT NULL,
+			quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+			current_question INTEGER DEFAULT 1,
+			score INTEGER DEFAULT 0,
+			active BOOLEAN DEFAULT true,
+			started_at TIMESTAMP DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		fmt.Printf("Warning: Failed creating whatsapp_quiz_sessions (might already exist): %v\n", err)
+	} else {
+		fmt.Println("✅ Created whatsapp_quiz_sessions table")
+	}
+
 	// Migration: Add options column if it doesn't exist
 	_, err = db.Exec(`
 		DO $$ 
