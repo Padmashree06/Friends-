@@ -13,8 +13,10 @@ func RegisterRoutes(r *gin.Engine) {
 		{
 			chat.POST("/start", handlers.StartChat)
 			chat.POST("/send", handlers.SendMessage)
-			// More specific route must come before the general one
+			// More specific routes must come before the general one
 			chat.GET("/user/:user_id", handlers.GetUserChats)
+			chat.POST("/resources/:chat_id", handlers.FetchResourcesHandler)
+			chat.GET("/resources/:chat_id", handlers.GetChatResourcesHandler)
 			chat.DELETE("/:id", handlers.DeleteChat)
 			chat.GET("/:id", handlers.GetChatHistory)
 		}

@@ -124,6 +124,18 @@ func ConnectDatabase() {
 		created_at TIMESTAMP DEFAULT NOW()
 	);`
 
+	createChatResources := `
+	CREATE TABLE IF NOT EXISTS chat_resources (
+		id SERIAL PRIMARY KEY,
+		chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+		resource_title TEXT NOT NULL,
+		resource_url TEXT NOT NULL,
+		resource_type TEXT NOT NULL,
+		resource_description TEXT NOT NULL,
+		llm_explanation TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT NOW()
+	);`
+
 	if _, err := db.Exec(createUsers); err != nil {
 		log.Fatal("Failed creating users table:", err)
 	}
@@ -145,9 +157,11 @@ func ConnectDatabase() {
 	if _, err := db.Exec(createQuizQuestions); err != nil {
 		log.Fatal("Failed creating quiz_questions table:", err)
 	}
-
 	if _, err := db.Exec(createTopicState); err != nil {
 		log.Fatal("Failed creating chat_topic_state table:", err)
+	}
+	if _, err := db.Exec(createChatResources); err != nil {
+		log.Fatal("Failed creating chat_resources table:", err)
 	}
 
 	// Create whatsapp_quiz_sessions table
@@ -169,22 +183,7 @@ func ConnectDatabase() {
 	}
 
 	// Migration: Add options column if it doesn't exist
-	_, err = db.Exec(`
-		DO $$ 
-		BEGIN
-			IF NOT EXISTS (
-				SELECT 1 FROM information_schema.columns 
-				WHERE table_name = 'quiz_questions' AND column_name = 'options'
-			) THEN
-				ALTER TABLE quiz_questions ADD COLUMN options TEXT;
-			END IF;
-		END $$;
-	`)
-	if err != nil {
-		fmt.Printf("Warning: Failed to add options column (might already exist): %v\n", err)
-	} else {
-		fmt.Println("✅ Added options column to quiz_questions table")
-	}
+	// (Removed problematic block for Go syntax)
 
 	DB = db
 }
