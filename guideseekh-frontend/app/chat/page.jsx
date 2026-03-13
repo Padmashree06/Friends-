@@ -3,7 +3,8 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Bot, User, Sparkles, LayoutGrid, MessageSquare,
-  X, Trash2, ChevronLeft, ChevronRight, Bell, GraduationCap, Plus
+  X, Trash2, ChevronLeft, ChevronRight, Bell, GraduationCap, Plus,
+  BookOpen, FileText, Video, ExternalLink
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -101,6 +102,10 @@ export default function ChatPage() {
   const [reminderTimeEnd, setReminderTimeEnd] = useState("");
   const [selectedDays, setSelectedDays] = useState([]);
   const [creatingReminder, setCreatingReminder] = useState(false);
+  
+  const [showResources, setShowResources] = useState(false);
+  const [resources, setResources] = useState([]);
+  const [isGeneratingResources, setIsGeneratingResources] = useState(false);
 
   // We use this to snap to bottom on exact new message
   const messagesEndRef = useRef(null);
@@ -141,6 +146,27 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    if (chatId && messages.length > 0) {
+      const currentTopic = topic || "General";
+      setIsGeneratingResources(true);
+      
+      const timer = setTimeout(() => {
+        setResources([
+          { id: 1, title: `Getting Started with ${currentTopic}`, type: "article", icon: FileText, url: "#" },
+          { id: 2, title: `${currentTopic} Video Tutorial`, type: "video", icon: Video, url: "#" },
+          { id: 3, title: "Related Documentation", type: "link", icon: ExternalLink, url: "#" },
+          { id: 4, title: "Community Best Practices", type: "article", icon: FileText, url: "#" },
+        ]);
+        setIsGeneratingResources(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    } else {
+      setResources([]);
+      setShowResources(false);
+    }
+  }, [chatId, topic, messages.length]);
 
   useEffect(() => {
     if (textAreaRef.current) {
@@ -727,8 +753,7 @@ export default function ChatPage() {
         </div>
       </motion.aside>
 
-      {/* Main content */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 h-screen ${sidebarOpen ? "lg:ml-[260px]" : ""}`}>
+      <div className={`flex-1 flex flex-col min-w-0 relative transition-all duration-300 h-screen ${sidebarOpen ? "lg:ml-[260px]" : ""}`}>
         
         {/* Header - Transparent/Minimal */}
         <div className="absolute top-0 w-full z-10 bg-gradient-to-b from-[#000000]/80 via-[#000000]/50 to-transparent pt-3 pb-8 pl-12 lg:pl-4 pr-4">
@@ -752,8 +777,8 @@ export default function ChatPage() {
           <AnimatePresence>
             {messages.length === 0 ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center h-full text-center px-4 max-w-2xl mx-auto mb-[20vh]">
-                <div className={`w-14 h-14 rounded-2xl bg-[${ACCENT}] flex items-center justify-center mb-6 shadow-xl shadow-[${ACCENT}]/20 shrink-0`}>
-                  <Sparkles className="w-7 h-7 text-white" />
+                <div className="w-16 h-16 rounded-2xl overflow-hidden mb-6 shadow-xl shrink-0">
+                  <img src="/logo.png" alt="Khoj" className="w-full h-full object-cover" />
                 </div>
                 <h2 className="text-2xl font-medium mb-2 text-white">How can I help you learn?</h2>
                 <p className="text-gray-400 text-sm">
@@ -779,8 +804,8 @@ export default function ChatPage() {
                       {/* Avatar */}
                       <div className="flex-shrink-0 mt-0.5 hidden sm:block">
                         {message.role === "bot" ? (
-                          <div className={`w-7 h-7 rounded-full bg-[${ACCENT}] text-white flex items-center justify-center shadow-lg shadow-[${ACCENT}]/10`}>
-                            <Sparkles className="w-4 h-4" />
+                          <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 shadow-lg">
+                            <img src="/logo.png" alt="Khoj" className="w-full h-full object-cover" />
                           </div>
                         ) : null}
                       </div>
@@ -789,8 +814,8 @@ export default function ChatPage() {
                       <div className={`flex-1 min-w-0 ${message.role === "user" ? "flex justify-end" : "pt-0.5"}`}>
                         {message.role === "bot" ? (
                           <div className="text-gray-100 text-[15px] leading-[1.9] w-full">
-                             <div className="sm:hidden w-6 h-6 mb-2 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-lg shadow-[#FF5500]/10">
-                                <Sparkles className="w-3.5 h-3.5" />
+                             <div className="sm:hidden w-6 h-6 mb-2 rounded-full overflow-hidden shadow-lg">
+                                <img src="/logo.png" alt="Khoj" className="w-full h-full object-cover" />
                               </div>
                             <TypewriterMessage text={message.content} messageId={message.id} isNew={newBotMessages.has(message.id)} />
                           </div>
@@ -808,8 +833,8 @@ export default function ChatPage() {
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full py-5 px-4 md:px-0 flex flex-col items-center">
                     <div className="max-w-3xl w-full flex gap-4 md:gap-5">
                       <div className="flex-shrink-0 mt-0.5 hidden sm:block">
-                        <div className={`w-7 h-7 rounded-full border border-white/10 flex items-center justify-center`}>
-                          <Sparkles className="w-3.5 h-3.5 text-gray-500" />
+                        <div className="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 opacity-60">
+                          <img src="/logo.png" alt="Khoj" className="w-full h-full object-cover" />
                         </div>
                       </div>
                       <div className="flex-1 min-w-0 pt-[10px]">
@@ -877,6 +902,97 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Contextual Resources - Fixed on the right */}
+      <AnimatePresence>
+        {chatId && messages.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="fixed right-6 top-24 z-40"
+          >
+            <div className="relative">
+              {/* Resources Dropdown */}
+              <AnimatePresence>
+                {showResources && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9, y: -20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    style={{ transformOrigin: "top right" }}
+                    className="absolute right-0 top-full mt-3 w-80 bg-[#111111] border border-white/10 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl"
+                  >
+                    <div className="p-4 border-b border-white/5 bg-white/[0.02]">
+                      <h3 className="font-medium text-white flex items-center gap-2">
+                        <BookOpen className={`w-4 h-4 text-[${ACCENT}]`} />
+                        Contextual Resources
+                      </h3>
+                      <p className="text-xs text-gray-400 mt-1 truncate">Topic: {topic || "Current Chat"}</p>
+                    </div>
+                    
+                    <div className="p-2 max-h-[60vh] overflow-y-auto">
+                      {isGeneratingResources ? (
+                        <div className="py-8 flex flex-col items-center justify-center text-gray-500">
+                          <Sparkles className={`w-6 h-6 mb-3 text-[${ACCENT}] animate-pulse`} />
+                          <p className="text-sm">Finding relevant resources...</p>
+                        </div>
+                      ) : resources.length > 0 ? (
+                        <div className="space-y-1">
+                          {resources.map((res) => {
+                            const IconObj = res.icon;
+                            return (
+                              <a
+                                key={res.id}
+                                href={res.url}
+                                onClick={(e) => { e.preventDefault(); alert(`Opening resource: ${res.title}`); }}
+                                className="flex items-start gap-3 p-3 rounded-xl hover:bg-white/5 transition group"
+                              >
+                                <div className="mt-0.5 p-1.5 rounded-lg bg-white/5 text-gray-400 group-hover:text-white transition">
+                                  <IconObj className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-200 group-hover:text-white transition line-clamp-2">{res.title}</p>
+                                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-1 block">{res.type}</span>
+                                </div>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="py-6 text-center text-gray-500 text-sm">
+                          No specific resources found.
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Trigger Button */}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowResources(!showResources)}
+                className={`relative h-12 px-5 rounded-full shadow-2xl flex items-center justify-center gap-2.5 transition-colors font-medium text-sm ${
+                  showResources ? `bg-[${ACCENT}] text-white shadow-[${ACCENT}]/20` : "bg-[#1a1a1a] border border-white/10 text-gray-300 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                Resources
+                
+                {/* Notification dot if resources exist but panel is closed */}
+                {!showResources && resources.length > 0 && !isGeneratingResources && (
+                  <span className={`absolute -top-1 -right-1 w-3.5 h-3.5 bg-[${ACCENT}] rounded-full border-2 border-[#1a1a1a]`} />
+                )}
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
