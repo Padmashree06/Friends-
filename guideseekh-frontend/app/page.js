@@ -1,11 +1,9 @@
-import Dashboard from "./Dashboard/page";
-import Chat from "./Chat/page";
+import Landing from "./components/Landing";
 
 export default function Home() {
   return (
     <div>
-      <Dashboard />
-      <Chat />
+      <Landing />
     </div>
   );
 }
