@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -106,13 +107,18 @@ func WhatsAppTriggerQuiz(c *gin.Context) {
 	`, user.Phone, quizID, time.Now())
 
 	// Call n8n webhook to start the quiz flow
-	n8nURL := "https://n8n-3-los0.onrender.com/webhook-test/quiz-start"
+	n8nURL := strings.TrimSpace(os.Getenv("N8N_WEBHOOK_URL"))
+	if n8nURL == "" {
+		n8nURL = "https://n8n-3-03gm.onrender.com/webhook/quiz-start"
+	}
 
 	firstQuestion, _ := getQuestionByOrder(quizID, 1)
 	firstQuestionMsg := formatQuestionMessage(firstQuestion, 1, len(questions))
+	var firstQuestionOptions []string
+	_ = json.Unmarshal([]byte(firstQuestion.Options), &firstQuestionOptions)
 
 	payload := map[string]interface{}{
-		"phone":           strings.TrimPrefix(user.Phone, "whatsapp:"),
+		"phone":           strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(user.Phone, "whatsapp:"), "+")),
 		"user_id":         schedule.UserID,
 		"quiz_id":         quizID,
 		"chat_id":         schedule.ChatID,
@@ -120,7 +126,7 @@ func WhatsAppTriggerQuiz(c *gin.Context) {
 		"total_questions": len(questions),
 		"current_order":   1,
 		"question":        firstQuestion.Question,
-		"options":         strings.Split(firstQuestion.Options, "|"),
+		"options":         firstQuestionOptions,
 		"answer":          firstQuestion.Answer,
 		"formatted_msg":   firstQuestionMsg,
 	}
@@ -154,7 +160,10 @@ func WhatsAppWebhook(c *gin.Context) {
 	from := c.PostForm("From")
 	body := c.PostForm("Body")
 
+	// Normalize phone: remove whatsapp: and + prefix
 	phone := strings.TrimPrefix(from, "whatsapp:")
+	phone = strings.TrimPrefix(phone, "+")
+	phone = strings.TrimSpace(phone)
 	userMessage := strings.TrimSpace(body)
 
 	if phone == "" || userMessage == "" {

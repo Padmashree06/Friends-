@@ -16,23 +16,24 @@ import (
 	"golang-service/services"
 )
 
-
-
 func GetQuizStateByPhone(c *gin.Context) {
-    phone := c.Query("phone")
-    if phone == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "phone is required"})
-        return
-    }
+	phone := c.Query("phone")
+	if phone == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "phone is required"})
+		return
+	}
+	phone = strings.TrimPrefix(phone, "+")
+	phone = strings.TrimSpace(phone)
+	fmt.Printf("GetQuizStateByPhone - phone: '%s' len: %d\n", phone, len(phone))
 
-    var result struct {
-        QuizID         int    `db:"quiz_id" json:"quiz_id"`
-        CurrentOrder   int    `db:"current_order" json:"current_order"`
-        TotalQuestions int    `db:"total_questions" json:"total_questions"`
-        ChatID         string `db:"chat_id" json:"chat_id"`
-    }
+	var result struct {
+		QuizID         int    `db:"quiz_id" json:"quiz_id"`
+		CurrentOrder   int    `db:"current_order" json:"current_order"`
+		TotalQuestions int    `db:"total_questions" json:"total_questions"`
+		ChatID         string `db:"chat_id" json:"chat_id"`
+	}
 
-    err := config.DB.Get(&result, `
+	err := config.DB.Get(&result, `
         SELECT 
             q.id as quiz_id,
             COALESCE((
@@ -44,39 +45,60 @@ func GetQuizStateByPhone(c *gin.Context) {
             q.total_questions,
             q.chat_id
         FROM quizzes q
-        JOIN users u ON u.id = q.user_id
-        WHERE u.phone = $1
+        LEFT JOIN users u ON u.id = q.user_id
+        LEFT JOIN whatsapp_quiz_sessions ws ON ws.quiz_id = q.id AND ws.active = true
+        WHERE (u.phone = $1 OR ws.phone = $1)
         AND q.status = 'in_progress'
         ORDER BY q.created_at DESC LIMIT 1
     `, phone)
 
-    if err != nil {
-        c.JSON(http.StatusNotFound, gin.H{"error": "No active quiz found for this phone"})
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No active quiz found for this phone"})
+		return
+	}
 
-    c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, result)
 }
 
-
 func MarkQuizInProgress(c *gin.Context) {
-    var body struct {
-        QuizID int `json:"quiz_id" binding:"required"`
-    }
-    if err := c.BindJSON(&body); err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
-        return
-    }
+	var body struct {
+		QuizID int    `json:"quiz_id" binding:"required"`
+		Phone  string `json:"phone"`
+	}
+	if err := c.BindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+	body.Phone = strings.TrimPrefix(body.Phone, "+")
 
-    _, err := config.DB.Exec(`
+	_, err := config.DB.Exec(`
         UPDATE quizzes SET status='in_progress' WHERE id=$1
     `, body.QuizID)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
-    c.JSON(http.StatusOK, gin.H{"message": "Quiz marked in_progress"})
+	// Get phone from quiz if not provided
+	phone := body.Phone
+	if phone == "" {
+		var quiz models.Quiz
+		config.DB.Get(&quiz, "SELECT user_id FROM quizzes WHERE id=$1", body.QuizID)
+		var user models.User
+		config.DB.Get(&user, "SELECT phone FROM users WHERE id=$1", quiz.UserID)
+		phone = user.Phone
+	}
+
+	// Create WhatsApp quiz session
+	if phone != "" {
+		config.DB.Exec("UPDATE whatsapp_quiz_sessions SET active=false WHERE phone=$1", phone)
+		config.DB.Exec(`
+            INSERT INTO whatsapp_quiz_sessions (phone, quiz_id, current_question, score, active, started_at)
+            VALUES ($1, $2, 1, 0, true, NOW())
+        `, phone, body.QuizID)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Quiz marked in_progress"})
 }
 
 func TriggerQuizReminder(c *gin.Context) {
@@ -724,10 +746,10 @@ func SubmitAnswer(c *gin.Context) {
 		return
 	}
 
-// Mark as in_progress if still pending
-if quiz.Status == "pending" {
-    config.DB.Exec("UPDATE quizzes SET status='in_progress' WHERE id=$1", body.QuizID)
-}
+	// Mark as in_progress if still pending
+	if quiz.Status == "pending" {
+		config.DB.Exec("UPDATE quizzes SET status='in_progress' WHERE id=$1", body.QuizID)
+	}
 
 	var q models.QuizQuestion
 	err := config.DB.Get(&q, `
