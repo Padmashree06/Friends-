@@ -1,214 +1,350 @@
 "use client";
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Permanent_Marker } from "next/font/google";
-import { Bricolage_Grotesque } from "next/font/google";
+import { motion } from "framer-motion";
+import { useRef, useEffect } from "react";
 
-const bricolageGrotesque = Bricolage_Grotesque({
-  subsets: ["latin"],
-  weight: ["700"],
-});
+/* ─── Design tokens ──────────────────────────────────────────────────────── */
+const C = {
+  accent:      "oklch(64.6% 0.222 41.116)",
+  accentDim:   "oklch(40% 0.18 27.325)",
+  accentGlow:  "oklch(57.7% 0.245 27.325 / 0.25)",
+  bg:          "oklch(6% 0 0)",
+  surface:     "oklch(10% 0 0)",
+  border:      "oklch(20% 0 0)",
+  borderHover: "oklch(57.7% 0.245 27.325 / 0.5)",
+  fg:          "oklch(97% 0 0)",
+  muted:       "oklch(55% 0 0)",
+  white:       "oklch(98% 0 0)",
+  black:       "oklch(0% 0 0)",
+};
 
-
-const permanentMarker = Permanent_Marker({
-  subsets: ["latin"],
-  weight: "400",
-});
-
-
-
-function StarryBackground() {
+/* ─── Interactive Background ─────────────────────────────────────────────── */
+function LandingBackground() {
   const canvasRef = useRef(null);
+  const mouse     = useRef({ x: -9999, y: -9999 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const ctx = canvas.getContext("2d");
-    let animationFrameId;
+    let raf, W, H;
 
-    let w, h, focalLength;
-    let numStars = 1000;
-    let stars = [];
+    // Warm orange / amber / red palette
+    const PALETTE = [
+      [255, 120, 20],
+      [255,  80, 10],
+      [220,  60,  5],
+      [255, 160, 40],
+      [180,  40,  5],
+      [255, 200, 60],
+    ];
 
-    // Helper function to initialize or re-initialize stars
-    const initStars = () => {
-      stars = Array.from({ length: numStars }, () => ({
-        x: Math.random() * w - w / 2,
-        y: Math.random() * h - h / 2,
-        z: Math.random() * w,
-        o: Math.random(),
-      }));
+    const N = 52;
+    let particles = [];
+
+    const mkParticle = () => {
+      const col = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+      return {
+        x:     Math.random() * W,
+        y:     Math.random() * H,
+        vx:    (Math.random() - 0.5) * 0.4,
+        vy:    (Math.random() - 0.5) * 0.4,
+        r:     20 + Math.random() * 60,
+        col,
+        alpha: 0.07 + Math.random() * 0.11,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.008 + Math.random() * 0.012,
+      };
     };
 
-    // Main resize function
-    const resizeCanvas = () => {
-      // Get the device pixel ratio for high-resolution screens
+    const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-
-      // Set canvas size, scaled for pixel ratio
-      w = window.innerWidth;
-      h = window.innerHeight;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      ctx.scale(dpr, dpr); // Scale context to match canvas size
-
-      focalLength = w / 2;
-      initStars();
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width  = W * dpr;
+      canvas.height = H * dpr;
+      ctx.scale(dpr, dpr);
+      particles = Array.from({ length: N }, mkParticle);
     };
 
-    // Animation loop
-    const animate = () => {
-      ctx.fillStyle = "rgba(0,0,0,1)";
-      ctx.fillRect(0, 0, w, h);
+    const onMouse = (e) => { mouse.current.x = e.clientX; mouse.current.y = e.clientY; };
+    const onTouch = (e) => { mouse.current.x = e.touches[0].clientX; mouse.current.y = e.touches[0].clientY; };
 
-      for (let i = 0; i < numStars; i++) {
-        const star = stars[i];
-        star.z -= 5;
-        if (star.z <= 0) star.z = w;
+    const draw = () => {
+      // Translucent fill → smooth trail / smear
+      ctx.fillStyle = "rgba(8,8,8,0.20)";
+      ctx.fillRect(0, 0, W, H);
 
-        const k = focalLength / star.z;
-        const px = star.x * k + w / 2;
-        const py = star.y * k + h / 2;
+      const mx = mouse.current.x;
+      const my = mouse.current.y;
 
-        if (px >= 0 && px <= w && py >= 0 && py <= h) {
-          const size = (1 - star.z / w) * 2.7;
-          const brightness = (1 - star.z / w) * 1.0 + 0.2;
+      for (const p of particles) {
+        // Breathe
+        p.phase += p.speed;
+        const radius = p.r * (1 + 0.18 * Math.sin(p.phase));
 
-          ctx.beginPath();
-          ctx.arc(px, py, size, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(255, 192, 220, ${brightness})`;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = "white";
-          ctx.fill();
+        // Mouse physics
+        const dx   = mx - p.x;
+        const dy   = my - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        if (dist < 220) {
+          // repel
+          const f = ((220 - dist) / 220) * 0.85;
+          p.vx -= (dx / dist) * f;
+          p.vy -= (dy / dist) * f;
+        } else if (dist > 520 && dist < 920) {
+          // soft long-range drift toward cursor
+          const f = ((dist - 520) / 400) * 0.055;
+          p.vx += (dx / dist) * f;
+          p.vy += (dy / dist) * f;
+        }
+
+        // Damping + organic noise
+        p.vx = p.vx * 0.97 + (Math.random() - 0.5) * 0.06;
+        p.vy = p.vy * 0.97 + (Math.random() - 0.5) * 0.06;
+
+        // Speed cap
+        const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (spd > 3) { p.vx = (p.vx / spd) * 3; p.vy = (p.vy / spd) * 3; }
+
+        p.x += p.vx;
+        p.y += p.vy;
+
+        // Wrap edges
+        if (p.x < -radius)       p.x = W + radius;
+        if (p.x > W + radius)    p.x = -radius;
+        if (p.y < -radius)       p.y = H + radius;
+        if (p.y > H + radius)    p.y = -radius;
+
+        // Soft radial glow orb
+        const [r, g, b] = p.col;
+        const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, radius);
+        grd.addColorStop(0,   `rgba(${r},${g},${b},${p.alpha * 1.7})`);
+        grd.addColorStop(0.4, `rgba(${r},${g},${b},${p.alpha})`);
+        grd.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = grd;
+        ctx.fill();
+      }
+
+      // Subtle mesh lines between close particles
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const d  = Math.sqrt(dx * dx + dy * dy);
+          if (d < 130) {
+            const op = (1 - d / 130) * 0.055;
+            ctx.strokeStyle = `rgba(255,110,20,${op})`;
+            ctx.lineWidth   = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
         }
       }
 
-      animationFrameId = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(draw);
     };
 
-    // Initial setup and event listeners
-    resizeCanvas();
-    animate();
-    window.addEventListener("resize", resizeCanvas);
-
-    
+    resize();
+    draw();
+    window.addEventListener("resize",    resize);
+    window.addEventListener("mousemove", onMouse);
+    window.addEventListener("touchmove", onTouch, { passive: true });
     return () => {
-      window.removeEventListener("resize", resizeCanvas);
-      cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize",    resize);
+      window.removeEventListener("mousemove", onMouse);
+      window.removeEventListener("touchmove", onTouch);
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed top-0 left-0 w-full h-full z-0 pointer-events-none"
-    />
-  );
+  return <canvas ref={canvasRef} className="fixed inset-0 w-full h-full z-0 pointer-events-none" />;
 }
 
-function Title() {
+/* ─── Hero ──────────────────────────────────────────────────────────────── */
+function Hero() {
   return (
-    
-    <div className="">
-      <div className={`${permanentMarker.className}  min-h-screen relative z-10 flex flex-col items-center justify-center  text-center px-6`}>
-         <h1 className= "text-4xl md:text-8xl font-extrabold mb-8 bg-linear-to-r from-violet-500 via-violet-700 to-fuchsia-900  bg-clip-text text-transparent drop-shadow-2xl">
+    <section className="relative z-10 min-h-screen flex flex-col items-center justify-center text-center px-6">
+
+      {/* Ambient glow blob */}
+      <div className="absolute inset-x-0 top-1/3 -translate-y-1/2 h-[500px] pointer-events-none"
+        style={{ background: `radial-gradient(ellipse 55% 45% at 50% 50%, ${C.accentGlow} 0%, transparent 70%)` }} />
+
+      {/* Eyebrow pill */}
+      <motion.span
+        initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
+        className="mb-6 inline-flex items-center gap-2 rounded-full border px-5 py-1.5 text-xs font-semibold uppercase tracking-[0.15em]"
+        style={{ borderColor: C.accentDim, color: C.accent, background: "oklch(57.7% 0.245 27.325 / 0.08)" }}
+      >
+        <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: C.accent }} />
+        AI-powered learning
+      </motion.span>
+
+      {/* Title */}
+      <motion.h1
+        initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.1 }}
+        className="text-[clamp(4.5rem,16vw,11rem)] font-black leading-none tracking-tight select-none"
+        style={{
+          color: C.white,
+          textShadow: `0 0 80px ${C.accentGlow}, 0 0 160px ${C.accentGlow}`,
+        }}
+      >
         Khoj
-      </h1>
-      <p className="text-lg md:text-2xl text-gray-300 mb-25 font-light">
-        A structured way to tunnel your curiosity !!
-      </p>
-      {/* Login Button */}
-      <Link href="/Login" passHref>
-        <button className={ `${bricolageGrotesque.className}group relative px-10 py-4 text-lg font-semibold rounded-full overflow-hidden transition-all hover:scale-105 mb-4 border-none outline-none`}>
-        <div className="absolute inset-0 bg-linear-to-r from-violet-900 via-violet-700 to-fuchsia-900"></div>
-        <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-white-600 to-grey-600 opacity-0 group-hover:opacity-100 blur-2xl transition-opacity"></div>
-        <span className="relative z-10">Login</span>
-      </button>
-      </Link>
-      
-      {/* Sign up hint */}
-      <p className="text-gray-400 text-lg">
-        Not signed up?{" "}
-        <a
-          href="/SignUp" 
-          className="text-violet-400 hover:text-fuchsia-300 transition-colors"
-        >
-          Sign up
-        </a>
-      </p>
-      </div>
-     
-      {/* Features Section */}
-      <section className={`${bricolageGrotesque.className} min-h-screen relative z-10 flex flex-col items-center justify-center  text-center px-6`}>
-        <div className="max-w-7xl mx-auto">
-          <h2 className={`${bricolageGrotesque.className} text-5xl md:text-6xl font-bold mb-16 text-center bg-linear-to-r from-violet-500 via-violet-700 to-fuchsia-600 bg-clip-text text-transparent`}>
-            Our Features
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon:  <Image src="/calendar(3).png" alt="icon" width={48} height={48} className="mx-auto" />,
-                title: "Personalized Schedule",
-                desc: "Smart timetables that adapt to your goals, pace, and daily routine, just like a personal coach. ",
-              },
-              {
-                icon:  <Image src="/books.png" alt="icon" width={48} height={48} className="mx-auto" />,
-                title: "Curated learning resources",
-                desc: "Hand-picked courses, videos, and articles customized to your interests and progress..",
-              },
-              {
-                icon:  <Image src="/progress.png" alt="icon" width={48} height={48} className="mx-auto" />,
-                title: "Progress Tracker",
-                desc: "Track your progress , evaluate your learning , and stay motivated",
-              },
-              {
-                icon:  <Image src="/bell.png" alt="icon" width={48} height={48} className="mx-auto" />,
-                title: "Custom Reminders",
-                desc: "Stay consistent with reminders sent via Email or WhatsApp at your chosen frequency.",
-              },
-              {
-                icon:  <Image src="/cross.png" alt="icon" width={48} height={48} className="mx-auto" />,
-                title: "Quizzes",
-                desc: "Quizzes that help you test your knowledge, know your weak points and help retain your learning.",
-              },
-              {
-                icon:  <Image src="/bot.png" alt="icon" width={48} height={48} className="mx-auto" />,
-                title: "All in one platform",
-                desc: "A platform which helps you stay curious, persistant and motivated.",
-              },
-            ].map((feature, i) => (
-              <div
-                key={i}
-                className="group relative p-8 rounded-3xl backdrop-blur-xl bg-white/5 border border-white/10 hover:border-violet-500/50 transition-all duration-500 hover:-translate-y-2"
-              >
-                <div className="absolute inset-0 bg-linear-to-br from-violet-600/10 to-fuchsia-600/10 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <div className="relative">
-                  <div className="text-5xl mb-4">{feature.icon}</div>
-                  <h3 className="text-2xl font-semibold mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-gray-400">{feature.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </div>
+      </motion.h1>
+
+      {/* Divider line with accent dots */}
+      <motion.div
+        initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.6, delay: 0.25 }}
+        className="my-6 flex items-center gap-3"
+      >
+        <span className="h-px w-16 opacity-30" style={{ background: C.white }} />
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: C.accent }} />
+        <span className="h-px w-16 opacity-30" style={{ background: C.white }} />
+      </motion.div>
+
+      {/* Sub-text */}
+      <motion.p
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
+        className="max-w-sm text-xl font-light mb-10"
+        style={{ color: C.muted }}
+      >
+        A structured way to tunnel your curiosity.
+      </motion.p>
+
+      {/* CTA buttons */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.32 }}
+        className="flex flex-col sm:flex-row gap-4"
+      >
+        {/* Primary — solid accent */}
+        <Link href="/Login">
+          <motion.button
+            whileHover={{ scale: 1.06, boxShadow: `0 0 32px -4px ${C.accent}` }}
+            whileTap={{ scale: 0.96 }}
+            className="px-10 py-4 rounded-full font-bold text-base transition-all"
+            style={{ background: C.accent, color: C.white }}
+          >
+            Login
+          </motion.button>
+        </Link>
+
+        {/* Ghost — border only */}
+        <Link href="/SignUp">
+          <motion.button
+            whileHover={{ scale: 1.06, borderColor: C.accent, color: C.accent }}
+            whileTap={{ scale: 0.96 }}
+            className="px-10 py-4 rounded-full font-bold text-base border transition-all"
+            style={{ borderColor: C.border, color: C.fg, background: "transparent" }}
+          >
+            Sign Up
+          </motion.button>
+        </Link>
+      </motion.div>
+
+      {/* Scroll hint */}
+      <motion.div
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2, duration: 0.8 }}
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+        style={{ color: C.muted }}
+      >
+        <span className="text-xs uppercase tracking-widest">Scroll</span>
+        <div className="w-px h-8 animate-pulse" style={{ background: `linear-gradient(to bottom, ${C.accent}, transparent)` }} />
+      </motion.div>
+    </section>
   );
 }
 
-// Named exports for reuse in other components
-export { StarryBackground, Title };
+/* ─── Features ──────────────────────────────────────────────────────────── */
+const FEATURES = [
+  { src: "/calendar(3).png", title: "Personalized Schedule", desc: "Smart timetables that adapt to your goals, pace, and daily routine." },
+  { src: "/books.png",       title: "Curated Resources",     desc: "Hand-picked courses, videos, and articles tailored to your interests." },
+  { src: "/progress.png",    title: "Progress Tracker",      desc: "Track your learning, evaluate results, and stay motivated." },
+  { src: "/bell.png",        title: "Custom Reminders",      desc: "Reminders via Email or WhatsApp at your chosen frequency." },
+  { src: "/cross.png",       title: "Smart Quizzes",         desc: "Test your knowledge, find weak spots, and reinforce retention." },
+  { src: "/bot.png",         title: "All-in-one Platform",   desc: "Stay curious, persistent, and motivated — in one place." },
+];
 
-// Default export for Next.js page
+function Features() {
+  return (
+    <section className="relative z-10 py-28 px-6">
+      <motion.h2
+        initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55 }}
+        className="text-center text-4xl sm:text-5xl font-black mb-4 tracking-tight"
+        style={{ color: C.white }}
+      >
+        Our Features
+      </motion.h2>
+      <motion.p
+        initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.55, delay: 0.1 }}
+        className="text-center mb-16 text-sm uppercase tracking-widest"
+        style={{ color: C.accent }}
+      >
+        Everything you need to learn better
+      </motion.p>
+
+      <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        {FEATURES.map((f, i) => (
+          <motion.div
+            key={i}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.45, delay: i * 0.07 }}
+            whileHover={{ y: -6, borderColor: C.borderHover }}
+            className="group relative rounded-2xl p-7 overflow-hidden transition-all duration-300 cursor-default"
+            style={{ background: C.surface, border: `1px solid ${C.border}` }}
+          >
+            {/* Accent glow on hover */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl"
+              style={{ background: `radial-gradient(ellipse 80% 55% at 50% 110%, oklch(57.7% 0.245 27.325 / 0.12) 0%, transparent 70%)` }} />
+            {/* Top edge accent line */}
+            <div className="absolute inset-x-0 top-0 h-px opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              style={{ background: `linear-gradient(90deg, transparent, ${C.accent}, transparent)` }} />
+
+            {/* Icon */}
+            <div className="mb-5 inline-flex items-center justify-center w-11 h-11 rounded-xl transition-all duration-300"
+              style={{ background: "oklch(57.7% 0.245 27.325 / 0.12)", border: `1px solid oklch(57.7% 0.245 27.325 / 0.25)` }}>
+              <Image src={f.src} alt={f.title} width={24} height={24} className="object-contain" />
+            </div>
+
+            <h3 className="text-base font-semibold mb-2 transition-colors duration-300"
+              style={{ color: C.fg }}>
+              {f.title}
+            </h3>
+            <p className="text-sm leading-relaxed" style={{ color: C.muted }}>
+              {f.desc}
+            </p>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────────────── */
+function Footer() {
+  return (
+    <footer className="relative z-10 border-t py-8 text-center text-xs uppercase tracking-widest"
+      style={{ borderColor: C.border, color: C.muted }}>
+      © {new Date().getFullYear()} Khoj — All rights reserved
+    </footer>
+  );
+}
+
+/* ─── Export ──────────────────────────────────────────────────────────────── */
 export default function Landing() {
   return (
-    <>
-      <StarryBackground />
-      <Title />
-    </>
+    <div style={{ background: "#080808", color: C.fg, minHeight: "100vh" }}>
+      <LandingBackground />
+      <Hero />
+      <Features />
+      <Footer />
+    </div>
   );
 }

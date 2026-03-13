@@ -7,6 +7,9 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+// The brand accent color
+const ACCENT = "#FF5500";
+
 // Typewriter effect for AI messages
 const TypewriterMessage = ({ text, messageId, isNew }) => {
   const [displayedText, setDisplayedText] = useState(isNew ? "" : text);
@@ -66,7 +69,7 @@ const TypewriterMessage = ({ text, messageId, isNew }) => {
     <span>
       {displayedText}
       {showCursor && (
-        <span className="inline-block w-[2px] h-4 bg-violet-400 ml-0.5 animate-pulse" />
+        <span className="inline-block w-[4px] h-[1em] ml-1 bg-white animate-pulse align-middle rounded-sm" />
       )}
     </span>
   );
@@ -86,6 +89,7 @@ export default function ChatPage() {
   const [loadingChats, setLoadingChats] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [newBotMessages, setNewBotMessages] = useState(new Set());
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [reminderDateTime, setReminderDateTime] = useState("");
   const [recurrenceType, setRecurrenceType] = useState("daily");
@@ -94,7 +98,11 @@ export default function ChatPage() {
   const [selectedDays, setSelectedDays] = useState([]);
   const [creatingReminder, setCreatingReminder] = useState(false);
 
+  // We use this to snap to bottom on exact new message
   const messagesEndRef = useRef(null);
+  // We use this to measure content
+  const textAreaRef = useRef(null);
+
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8080";
 
   // Desktop: sidebar open by default
@@ -126,7 +134,14 @@ export default function ChatPage() {
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, loading]);
+
+  useEffect(() => {
+    if (textAreaRef.current) {
+      textAreaRef.current.style.height = "auto";
+      textAreaRef.current.style.height = Math.min(textAreaRef.current.scrollHeight, 200) + "px";
+    }
+  }, [inputMessage]);
 
   const loadUserChats = async (uid) => {
     if (!uid) return;
@@ -270,11 +285,10 @@ export default function ChatPage() {
     if (window.innerWidth < 1024) setSidebarOpen(false);
   };
 
-  const deleteChat = async (chatIdToDelete, chatTopicToDelete, e) => {
+  const deleteChat = async (chatIdToDelete, e) => {
     e.stopPropagation();
     if (!userId || !chatIdToDelete) return;
-    if (!confirm(`Delete chat about "${chatTopicToDelete || "Untitled"}"?`)) return;
-
+    setConfirmDeleteId(null);
     try {
       const res = await fetch(`${apiBaseUrl}/api/chat/${chatIdToDelete}`, {
         method: "DELETE",
@@ -348,10 +362,10 @@ export default function ChatPage() {
   // Loading state
   if (loadingChats && !chatId) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0014] to-[#1a0033] text-white">
-        <div className="flex gap-1">
-          {[0, 0.1, 0.2].map((d, i) => (
-            <span key={i} className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />
+      <div className="min-h-screen flex items-center justify-center bg-[#000000] text-white">
+        <div className="flex gap-1.5">
+          {[0, 0.15, 0.3].map((d, i) => (
+            <span key={i} className={`w-2.5 h-2.5 bg-[${ACCENT}] rounded-full animate-bounce`} style={{ animationDelay: `${d}s` }} />
           ))}
         </div>
       </div>
@@ -361,19 +375,21 @@ export default function ChatPage() {
   // No chat selected and no chats exist — empty state
   if (!chatId && !loadingChats) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a0014] to-[#1a0033] text-white p-4">
+      <div className="min-h-screen flex items-center justify-center bg-[#000000] text-white p-4">
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 40 }}
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="relative bg-gray-900/60 backdrop-blur-lg rounded-2xl shadow-[0_0_40px_rgba(0,0,0)] p-10 w-full max-w-md border border-white/10 text-center"
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="relative max-w-md w-full text-center"
         >
-          <Sparkles className="w-14 h-14 text-violet-400 mx-auto mb-4" />
-          <h2 className="text-3xl font-extrabold mb-2 bg-gradient-to-r from-violet-50 to-violet-100 bg-clip-text text-transparent">
-            Start Learning
+          <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-white/5 flex items-center justify-center shrink-0">
+            <Sparkles className={`w-8 h-8 text-[${ACCENT}]`} />
+          </div>
+          <h2 className="text-3xl font-medium mb-3 text-white">
+            What do you want to learn?
           </h2>
-          <p className="text-gray-400 mb-8 text-sm">
-            Click the button below to open a new chat. Just start typing — the AI will automatically detect your topic from your first message.
+          <p className="text-gray-400 mb-8 text-sm leading-relaxed max-w-sm mx-auto">
+            Click below to open a new chat. Khoj will automatically detect your topic from your first message.
           </p>
           {error && (
             <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4">
@@ -385,9 +401,9 @@ export default function ChatPage() {
             whileTap={{ scale: 0.98 }}
             onClick={createNewChat}
             disabled={startingChat}
-            className="w-full py-3 font-semibold rounded-full bg-gradient-to-r from-violet-700 via-violet-600 to-indigo-600 hover:shadow-[0_0_24px_-4px_rgba(217,70,239,0.8)] disabled:opacity-60 transition text-white"
+            className={`w-full py-3.5 font-medium rounded-2xl bg-[${ACCENT}] hover:brightness-110 disabled:opacity-60 transition text-white shadow-lg shadow-[${ACCENT}]/20`}
           >
-            {startingChat ? "Creating..." : "+ New Chat"}
+            {startingChat ? "Creating..." : "Start a New Topic"}
           </motion.button>
         </motion.div>
       </div>
@@ -395,26 +411,25 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0014] to-[#1a0033] text-white flex relative">
+    <div className="min-h-screen bg-[#000000] text-white flex relative overflow-hidden">
       {/* Mobile backdrop */}
       {sidebarOpen && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-20 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 lg:hidden"
         />
       )}
 
-      {/* Sidebar toggle button */}
+      {/* Sidebar toggle button (always visible) */}
       <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="fixed top-1/2 -translate-y-1/2 bg-gray-900/90 backdrop-blur-lg border border-white/20 border-l-0 rounded-r-lg p-2.5 z-40 hover:bg-gray-800/90 shadow-lg transition-all duration-300"
-        animate={{ left: sidebarOpen ? "280px" : "0px" }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
+        className="fixed top-1/2 -translate-y-1/2 bg-[#0f0f0f] border border-white/10 border-l-0 rounded-r-xl p-2 z-40 shadow-xl transition-all duration-300"
+        animate={{ left: sidebarOpen ? "260px" : "0px" }}
       >
-        {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+        {sidebarOpen ? <ChevronLeft className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
       </motion.button>
 
       {/* Reminder Modal */}
@@ -423,34 +438,34 @@ export default function ChatPage() {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={() => { setShowReminderModal(false); setReminderDateTime(""); setReminderTime(""); setReminderTimeEnd(""); setSelectedDays([]); setRecurrenceType("daily"); setError(""); }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 40 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.3, ease: "easeOut" }}
+            initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2, ease: "easeOut" }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative bg-gray-900/90 backdrop-blur-lg rounded-2xl shadow-[0_0_40px_rgba(0,0,0)] p-8 w-full max-w-md border border-white/10">
+            <div className="relative bg-[#0a0a0a] rounded-2xl shadow-2xl p-8 w-full max-w-md border border-white/10">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <Bell className="w-7 h-7 text-violet-400" />
-                  <h2 className="text-xl font-extrabold text-white">Set Reminder</h2>
+                  <Bell className={`w-6 h-6 text-[${ACCENT}]`} />
+                  <h2 className="text-xl font-medium text-white">Set Reminder</h2>
                 </div>
-                <button onClick={() => { setShowReminderModal(false); setError(""); }} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white">
+                <button onClick={() => { setShowReminderModal(false); setError(""); }} className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition">
                   <X className="w-5 h-5" />
                 </button>
               </div>
               <p className="text-gray-400 text-sm mb-5">Schedule a reminder for this chat{topic ? ` about "${topic}"` : ""}</p>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {/* Frequency */}
                 <div>
                   <label className="block text-sm text-gray-300 mb-2">Frequency</label>
                   <div className="grid grid-cols-3 gap-2">
                     {["daily", "weekly", "once"].map((t) => (
                       <button key={t} onClick={() => { setRecurrenceType(t); if (t !== "once") setReminderDateTime(""); }}
-                        className={`px-3 py-2 rounded-lg border text-xs font-medium capitalize transition ${recurrenceType === t ? "bg-violet-700/30 border-violet-500 text-white" : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"}`}
+                        className={`px-3 py-2.5 rounded-xl border text-sm capitalize transition ${recurrenceType === t ? `bg-[${ACCENT}]/10 border-[${ACCENT}]/50 text-white` : "bg-transparent border-white/10 text-gray-400 hover:bg-white/5"}`}
                         disabled={creatingReminder}>
                         {t}
                       </button>
@@ -463,7 +478,7 @@ export default function ChatPage() {
                     <label className="block text-sm text-gray-300 mb-2">Date & Time</label>
                     <input type="datetime-local" value={reminderDateTime} onChange={(e) => setReminderDateTime(e.target.value)}
                       min={new Date().toISOString().slice(0, 16)} disabled={creatingReminder}
-                      className="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-gray-100" />
+                      className={`w-full px-4 py-3 rounded-xl bg-black border border-white/10 focus:border-[${ACCENT}]/50 focus:outline-none focus:ring-1 focus:ring-[${ACCENT}]/50 text-gray-100 transition`} />
                   </div>
                 )}
 
@@ -472,10 +487,10 @@ export default function ChatPage() {
                     <label className="block text-sm text-gray-300 mb-2">Time</label>
                     <div className="flex gap-3">
                       <input type="time" value={reminderTime} onChange={(e) => setReminderTime(e.target.value)} disabled={creatingReminder}
-                        className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/10 focus:border-violet-500 focus:outline-none text-gray-100" />
-                      <span className="text-gray-400 text-sm self-center">to</span>
+                        className={`flex-1 px-4 py-3 rounded-xl bg-black border border-white/10 focus:border-[${ACCENT}]/50 focus:outline-none focus:ring-1 focus:ring-[${ACCENT}]/50 text-gray-100 transition`} />
+                      <span className="text-gray-500 text-sm self-center">to</span>
                       <input type="time" value={reminderTimeEnd} onChange={(e) => setReminderTimeEnd(e.target.value)} disabled={creatingReminder} placeholder="Optional"
-                        className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/10 focus:border-violet-500 focus:outline-none text-gray-100" />
+                        className={`flex-1 px-4 py-3 rounded-xl bg-black border border-white/10 focus:border-[${ACCENT}]/50 focus:outline-none focus:ring-1 focus:ring-[${ACCENT}]/50 text-gray-100 transition`} />
                     </div>
                   </div>
                 )}
@@ -483,11 +498,11 @@ export default function ChatPage() {
                 {recurrenceType === "weekly" && (
                   <div>
                     <label className="block text-sm text-gray-300 mb-2">Days</label>
-                    <div className="grid grid-cols-7 gap-1">
+                    <div className="grid grid-cols-7 gap-1.5">
                       {[{d:0,l:"Su"},{d:1,l:"Mo"},{d:2,l:"Tu"},{d:3,l:"We"},{d:4,l:"Th"},{d:5,l:"Fr"},{d:6,l:"Sa"}].map(({d, l}) => (
                         <button key={d} type="button" disabled={creatingReminder}
                           onClick={() => setSelectedDays(selectedDays.includes(d) ? selectedDays.filter((x) => x !== d) : [...selectedDays, d])}
-                          className={`py-2 rounded-lg border text-xs font-medium transition ${selectedDays.includes(d) ? "bg-violet-700/30 border-violet-500 text-white" : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"}`}>
+                          className={`py-2.5 rounded-xl border text-xs font-medium transition ${selectedDays.includes(d) ? `bg-[${ACCENT}]/10 border-[${ACCENT}]/50 text-white` : "bg-transparent border-white/10 text-gray-400 hover:bg-white/5"}`}>
                           {l}
                         </button>
                       ))}
@@ -497,14 +512,14 @@ export default function ChatPage() {
 
                 {error && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">{error}</div>}
 
-                <div className="flex gap-3">
+                <div className="flex gap-3 pt-2">
                   <button onClick={() => { setShowReminderModal(false); setError(""); }} disabled={creatingReminder}
-                    className="flex-1 px-4 py-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-sm transition">
+                    className="flex-1 px-4 py-3 rounded-xl bg-transparent hover:bg-white/5 border border-white/10 text-sm transition">
                     Cancel
                   </button>
                   <button onClick={createReminder} disabled={creatingReminder || (recurrenceType === "once" && !reminderDateTime) || (recurrenceType !== "once" && !reminderTime) || (recurrenceType === "weekly" && selectedDays.length === 0)}
-                    className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-violet-700 to-indigo-600 font-semibold disabled:opacity-60 transition text-white">
-                    {creatingReminder ? "Creating..." : "Create"}
+                    className={`flex-1 px-4 py-3 rounded-xl bg-[${ACCENT}] font-medium disabled:opacity-60 transition text-white hover:brightness-110`}>
+                    {creatingReminder ? "Creating..." : "Save"}
                   </button>
                 </div>
               </div>
@@ -513,218 +528,259 @@ export default function ChatPage() {
         </>
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar - ChatGPT Style */}
       <motion.aside
         initial={false}
-        animate={{ width: sidebarOpen ? "280px" : "0px" }}
-        transition={{ duration: 0.3, ease: "easeInOut" }}
-        className="fixed left-0 top-0 h-screen bg-gray-900/60 backdrop-blur-lg border-r border-white/10 flex-shrink-0 overflow-hidden z-30"
+        animate={{ width: sidebarOpen ? "260px" : "0px" }}
+        transition={{ duration: 0.2, ease: "easeOut" }}
+        className="fixed left-0 top-0 h-screen bg-[#0c0c0c] border-r border-white/[0.07] flex-shrink-0 overflow-hidden z-30 shadow-[4px_0_24px_rgba(0,0,0,0.5)]"
       >
-        <div className={`flex flex-col h-full w-[280px] transition-opacity duration-300 ${sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
-          {/* Sidebar header */}
-          <div className="p-4 border-b border-white/10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">KHOJ</h2>
-            </div>
-
-            {/* Nav buttons */}
-            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-              onClick={() => router.push("/Dashboard")}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-violet-700/20 hover:bg-violet-700/30 border border-violet-500/20 text-white transition mb-2">
-              <LayoutGrid className="w-5 h-5" />
-              <span className="font-medium">Dashboard</span>
+        <div className={`flex flex-col h-full w-[260px] transition-opacity duration-300 ${sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+          
+          <div className="p-3">
+            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
+              onClick={createNewChat} disabled={startingChat}
+              className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-white/5 transition mb-1 text-white border border-transparent hover:border-white/5">
+              <div className="flex items-center gap-3">
+                <div className={`w-6 h-6 rounded-full bg-white/10 flex items-center justify-center`}>
+                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                </div>
+                <span className="font-medium text-sm">New chat</span>
+              </div>
+              <Plus className="w-4 h-4 text-gray-400" />
             </motion.button>
-            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+
+            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
+              onClick={() => router.push("/Dashboard")}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-300 transition mb-1 hover:bg-white/5 border border-transparent hover:border-white/5">
+              <LayoutGrid className="w-4 h-4 ml-1" />
+              <span className="font-medium text-sm">Dashboard</span>
+            </motion.button>
+            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
               onClick={() => router.push("/quiz")}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-violet-700/20 hover:bg-violet-700/30 border border-violet-500/20 text-white transition mb-4">
-              <GraduationCap className="w-5 h-5" />
-              <span className="font-medium">Quiz</span>
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-300 transition hover:bg-white/5 border border-transparent hover:border-white/5">
+              <GraduationCap className="w-4 h-4 ml-1" />
+              <span className="font-medium text-sm">Quiz</span>
             </motion.button>
           </div>
 
-          {/* Chat list */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Chats</h3>
-              <div className="flex items-center gap-2">
-                <button onClick={() => userId && loadUserChats(userId)} disabled={loadingChats}
-                  className="text-violet-400 hover:text-violet-300 text-xs disabled:opacity-50" title="Refresh">↻</button>
-                {/* + New chat button in sidebar */}
-                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                  onClick={createNewChat} disabled={startingChat}
-                  className="flex items-center gap-1 text-violet-400 hover:text-violet-300 text-xs disabled:opacity-50"
-                  title="New chat">
-                  <Plus className="w-4 h-4" /> New
-                </motion.button>
-              </div>
-            </div>
+          <div className="px-3 pt-3 pb-2 border-t border-[#151515] mt-2">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest px-2 mb-2 flex items-center justify-between">
+              History
+              <button onClick={() => userId && loadUserChats(userId)} disabled={loadingChats}
+                  className="text-gray-500 hover:text-white transition" title="Refresh">↻</button>
+            </h3>
+          </div>
 
+          <div className="flex-1 overflow-y-auto px-3 pb-4">
             {loadingChats ? (
-              <div className="flex justify-center py-8">
-                <div className="flex gap-1">
-                  {[0, 0.1, 0.2].map((d, i) => (
-                    <span key={i} className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />
+              <div className="flex justify-center py-6">
+                <div className="flex gap-1.5">
+                  {[0, 0.15, 0.3].map((d, i) => (
+                    <span key={i} className="w-1.5 h-1.5 bg-gray-600 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />
                   ))}
                 </div>
               </div>
             ) : chatList.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 text-sm">
-                <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                <p>No chats yet</p>
-                <p className="text-xs mt-1">Click + New to begin</p>
+              <div className="py-8 px-4 text-gray-600">
+                <p className="text-xs">No previous chats</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-0.5">
                 {chatList.map((chat) => (
                   <div key={chat.id}
-                    className={`group relative w-full p-3 rounded-lg transition ${chatId === chat.id ? "bg-violet-700/30 border border-violet-500/30" : "bg-white/5 hover:bg-white/10 border border-white/10"}`}>
-                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                      onClick={() => loadChat(chat.id, chat.topic)}
-                      className="w-full text-left flex items-start gap-2">
-                      <MessageSquare className={`w-4 h-4 mt-1 flex-shrink-0 ${chatId === chat.id ? "text-violet-400" : "text-gray-400"}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium truncate ${chatId === chat.id ? "text-white" : "text-gray-300"}`}>
-                          {chat.topic || <span className="italic text-gray-500">New chat</span>}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">{formatDate(chat.updated_at || chat.created_at)}</p>
+                    className={`group relative w-full px-2 py-2.5 rounded-xl transition ${chatId === chat.id ? "bg-white/10" : "hover:bg-[#111]"}`}>
+                    {confirmDeleteId === chat.id ? (
+                      /* Inline confirm row */
+                      <div className="flex items-center gap-2 px-1">
+                        <span className="flex-1 text-xs text-gray-400 truncate">Delete this chat?</span>
+                        <button
+                          onClick={(e) => deleteChat(chat.id, e)}
+                          className="px-2 py-1 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 text-xs font-medium transition"
+                        >Yes</button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null); }}
+                          className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:bg-white/10 text-xs transition"
+                        >No</button>
                       </div>
-                    </motion.button>
-                    <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                      onClick={(e) => deleteChat(chat.id, chat.topic, e)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500/20 text-red-400" title="Delete">
-                      <Trash2 className="w-4 h-4" />
-                    </motion.button>
+                    ) : (
+                      <>
+                        <motion.button whileTap={{ scale: 0.99 }}
+                          onClick={() => loadChat(chat.id, chat.topic)}
+                          className="w-full text-left flex items-center gap-0">
+                          <div className="flex-1 min-w-0 pr-6">
+                            <p className={`text-sm truncate ${chatId === chat.id ? "text-white font-medium" : "text-gray-400 group-hover:text-gray-200"}`}>
+                              {chat.topic || "New chat"}
+                            </p>
+                          </div>
+                        </motion.button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(chat.id); }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10 text-gray-500 hover:text-red-400" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
+          
+          <div className="p-4 border-t border-[#151515] flex items-center gap-3">
+             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[oklch(64.6%_0.222_41.116)] to-[oklch(50%_0.15_30)] flex items-center justify-center shrink-0 shadow-lg" />
+             <span className="text-sm font-medium text-gray-200">Khoj Account</span>
+          </div>
         </div>
       </motion.aside>
 
       {/* Main content */}
-      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ${sidebarOpen ? "lg:ml-[280px]" : ""}`}>
-        {/* Header */}
-        <div className="border-b border-white/10 bg-gray-900/40 backdrop-blur-sm">
-          <div className="px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Bot className="w-6 h-6 text-violet-400" />
-              <div>
-                <h1 className="text-lg font-semibold">
-                  {topic ? `Chat: ${topic}` : "New Chat"}
-                </h1>
-                <p className="text-xs text-gray-400">
-                  {topic ? "Topic locked — stay on topic" : "Send your first message to set the topic"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 h-screen ${sidebarOpen ? "lg:ml-[260px]" : ""}`}>
+        
+        {/* Header - Transparent/Minimal */}
+        <div className="absolute top-0 w-full z-10 bg-gradient-to-b from-[#000000]/80 via-[#000000]/50 to-transparent pt-3 pb-8 pl-12 lg:pl-4 pr-4">
+          <div className="flex items-center justify-between max-w-4xl mx-auto">
+            <span className="text-gray-400 text-sm font-medium hover:text-gray-200 transition cursor-pointer flex items-center gap-1.5">
+              Khoj <span className="opacity-50">/</span> {topic ? topic : "New topic"}
+            </span>
+            <div className="flex items-center">
+              <button
                 onClick={() => { setShowReminderModal(true); setError(""); }}
                 disabled={!chatId}
-                className="px-3 py-2 rounded-lg bg-violet-700/20 hover:bg-violet-700/30 border border-violet-500/20 text-sm transition disabled:opacity-50 flex items-center gap-2">
-                <Bell className="w-4 h-4" /> Reminder
-              </motion.button>
-              <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                onClick={createNewChat} disabled={startingChat}
-                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 text-sm transition flex items-center gap-2 disabled:opacity-50">
-                <Plus className="w-4 h-4" /> New Chat
-              </motion.button>
+                className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition disabled:opacity-30 tooltip-trigger">
+                <Bell className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6">
-          <div className="max-w-4xl mx-auto space-y-4">
-            <AnimatePresence>
-              {messages.length === 0 ? (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16 text-gray-400">
-                  <Bot className="w-16 h-16 mx-auto mb-4 text-violet-400/50" />
-                  <p className="text-lg mb-1">What do you want to learn today?</p>
-                  <p className="text-sm text-gray-500">
-                    Just start typing — your topic will be detected automatically.
-                  </p>
-                </motion.div>
-              ) : (
-                messages.map((message, index) => (
-                  <motion.div key={message.id || index}
-                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                    className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
-                    {message.role === "bot" && (
-                      <div className="w-8 h-8 rounded-full bg-violet-600/20 flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-5 h-5 text-violet-400" />
-                      </div>
-                    )}
-                    <div className={`max-w-[70%] rounded-2xl px-4 py-3 ${message.role === "user" ? "bg-gradient-to-r from-violet-700 to-indigo-700 text-white" : "bg-gray-800/60 backdrop-blur-sm border border-white/10 text-gray-100"}`}>
-                      <p className="whitespace-pre-wrap break-words">
-                        {message.role === "bot" ? (
-                          <TypewriterMessage text={message.content} messageId={message.id} isNew={newBotMessages.has(message.id)} />
-                        ) : message.content}
-                      </p>
-                      {message.created_at && (
-                        <p className="text-xs mt-2 opacity-60">
-                          {new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      )}
-                    </div>
-                    {message.role === "user" && (
-                      <div className="w-8 h-8 rounded-full bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
-                        <User className="w-5 h-5 text-indigo-400" />
-                      </div>
-                    )}
-                  </motion.div>
-                ))
-              )}
-            </AnimatePresence>
-
-            {loading && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3 justify-start">
-                <div className="w-8 h-8 rounded-full bg-violet-600/20 flex items-center justify-center">
-                  <Bot className="w-5 h-5 text-violet-400" />
+        {/* Messages Flow - ChatGPT Style */}
+        <div className="flex-1 overflow-y-auto w-full pt-16">
+          <AnimatePresence>
+            {messages.length === 0 ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center h-full text-center px-4 max-w-2xl mx-auto mb-[20vh]">
+                <div className={`w-14 h-14 rounded-2xl bg-[${ACCENT}] flex items-center justify-center mb-6 shadow-xl shadow-[${ACCENT}]/20 shrink-0`}>
+                  <Sparkles className="w-7 h-7 text-white" />
                 </div>
-                <div className="bg-gray-800/60 backdrop-blur-sm border border-white/10 rounded-2xl px-4 py-3">
-                  <div className="flex gap-1">
-                    {[0, 0.1, 0.2].map((d, i) => (
-                      <span key={i} className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" style={{ animationDelay: `${d}s` }} />
+                <h2 className="text-2xl font-medium mb-2 text-white">How can I help you learn?</h2>
+                <p className="text-gray-400 text-sm">
+                  Your knowledge journey is unique. Ask a question to begin.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-10 w-full max-w-xl">
+                    {["Explain quantum computing", "How do Black holes form?", "Summarize WWII", "Best React hooks to know"].map((suggest, i) => (
+                      <button key={i} className="text-left p-4 rounded-xl border border-white/5 bg-[#080808] hover:bg-[#111] text-gray-300 text-sm transition"
+                        onClick={() => { setInputMessage(suggest); }}>
+                        {suggest}
+                      </button>
                     ))}
-                  </div>
                 </div>
               </motion.div>
+            ) : (
+              <div className="flex flex-col pb-44">
+                {messages.map((message, index) => (
+                  <motion.div key={message.id || index}
+                    initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+                    className={`w-full py-5 px-4 md:px-0 flex flex-col items-center ${message.role === "bot" ? "bg-transparent" : "bg-transparent"}`}>
+                    
+                    <div className="max-w-3xl w-full flex gap-4 md:gap-5">
+                      {/* Avatar */}
+                      <div className="flex-shrink-0 mt-0.5 hidden sm:block">
+                        {message.role === "bot" ? (
+                          <div className={`w-7 h-7 rounded-full bg-[${ACCENT}] text-white flex items-center justify-center shadow-lg shadow-[${ACCENT}]/10`}>
+                            <Sparkles className="w-4 h-4" />
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Content */}
+                      <div className={`flex-1 min-w-0 ${message.role === "user" ? "flex justify-end" : "pt-0.5"}`}>
+                        {message.role === "bot" ? (
+                          <div className="text-gray-100 text-[15px] leading-[1.9] prose prose-invert prose-p:my-3 prose-li:my-1 prose-headings:mt-5 prose-headings:mb-2 max-w-none break-words">
+                             <div className="sm:hidden w-6 h-6 mb-2 rounded-full bg-[#FF5500] text-white flex items-center justify-center shadow-lg shadow-[#FF5500]/10">
+                                <Sparkles className="w-3.5 h-3.5" />
+                              </div>
+                            <TypewriterMessage text={message.content} messageId={message.id} isNew={newBotMessages.has(message.id)} />
+                          </div>
+                        ) : (
+                          <div className="inline-block bg-[#151515] px-5 py-3 rounded-3xl text-gray-100 text-[15px] max-w-full break-words shadow-sm">
+                            {message.content}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+                
+                {loading && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full py-5 px-4 md:px-0 flex flex-col items-center">
+                    <div className="max-w-3xl w-full flex gap-4 md:gap-5">
+                      <div className="flex-shrink-0 mt-0.5 hidden sm:block">
+                        <div className={`w-7 h-7 rounded-full border border-white/10 flex items-center justify-center`}>
+                          <Sparkles className="w-3.5 h-3.5 text-gray-500" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0 pt-[10px]">
+                        <div className="flex gap-1.5">
+                          {[0, 0.15, 0.3].map((d, i) => (
+                            <span key={i} className="w-[5px] h-[5px] bg-[oklch(64.6%_0.222_41.116)] rounded-full animate-pulse" style={{ animationDelay: `${d}s`, opacity: 0.6 }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+                <div ref={messagesEndRef} className="h-4" />
+              </div>
             )}
-            <div ref={messagesEndRef} />
-          </div>
+          </AnimatePresence>
         </div>
 
-        {/* Error */}
-        {error && (
-          <div className="px-4">
-            <div className="max-w-4xl mx-auto mb-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3 flex items-center justify-between">
-              <span>{error}</span>
-              <button onClick={() => setError("")} className="text-red-400 hover:text-red-300 ml-4"><X className="w-4 h-4" /></button>
+        {/* Input Area - Floating fixed at bottom like ChatGPT */}
+        <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#000000] via-[#000000] to-transparent pt-12 pb-[1.5rem]">
+          {error && (
+            <div className="max-w-3xl mx-auto px-4 mb-3 relative z-10">
+              <div className="text-xs text-red-300 bg-red-900/30 border border-red-500/30 rounded-xl p-3 flex items-center justify-between backdrop-blur-md">
+                <span>{error}</span>
+                <button onClick={() => setError("")} className="text-red-400 hover:text-red-300 ml-4 p-1"><X className="w-3.5 h-3.5" /></button>
+              </div>
             </div>
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="border-t border-white/10 bg-gray-900/40 backdrop-blur-sm">
-          <div className="max-w-4xl mx-auto px-4 py-4 flex gap-3">
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder={topic ? `Ask about ${topic}...` : "Start typing to begin (your first message sets the topic)..."}
-              disabled={loading || !chatId}
-              className="flex-1 px-4 py-3 rounded-xl bg-black/40 border border-white/10 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 text-gray-100 placeholder-gray-500 disabled:opacity-50"
-            />
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              onClick={sendMessage}
-              disabled={loading || !inputMessage.trim() || !chatId}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-violet-700 to-indigo-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_0_24px_-4px_rgba(217,70,239,0.8)] transition flex items-center gap-2">
-              <Send className="w-5 h-5" />
-              {loading ? "..." : "Send"}
-            </motion.button>
+          )}
+          
+          <div className="max-w-3xl mx-auto px-4 lg:px-0 relative z-10">
+            <div className="relative flex items-end w-full bg-[#151515] border border-white/5 rounded-3xl shadow-2xl focus-within:bg-[#1a1a1a] focus-within:border-white/10 transition-colors">
+              <textarea
+                ref={textAreaRef}
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!loading) sendMessage();
+                  }
+                }}
+                placeholder={topic ? `Ask anything about ${topic}...` : "Message Khoj..."}
+                disabled={loading || !chatId}
+                rows={1}
+                className="w-full max-h-[200px] min-h-[56px] bg-transparent text-gray-100 placeholder-gray-500 px-5 py-4 resize-none focus:outline-none text-[15px] leading-relaxed rounded-3xl"
+                style={{ overflowY: 'auto' }}
+              />
+              <motion.button 
+                whileHover={inputMessage.trim() ? { scale: 1.05 } : {}} 
+                whileTap={inputMessage.trim() ? { scale: 0.95 } : {}}
+                onClick={sendMessage}
+                disabled={loading || !inputMessage.trim() || !chatId}
+                className={`absolute right-3 bottom-2 p-2 rounded-full transition-all duration-300 ${
+                  inputMessage.trim() && !loading
+                    ? `bg-white text-black shadow-md`
+                    : "bg-white/5 text-gray-600"
+                }`}>
+                <Send className="w-4 h-4 ml-[1px]" />
+              </motion.button>
+            </div>
+            
+            <div className="text-center mt-3">
+              <span className="text-[11px] text-gray-500 font-medium">Khoj can make mistakes. Consider verifying important information.</span>
+            </div>
           </div>
         </div>
       </div>
