@@ -80,6 +80,9 @@ export default function ChatPage() {
   const [userId, setUserId] = useState(null);
   const [chatId, setChatId] = useState(null);
   const [topic, setTopic] = useState("");
+  const [username, setUsername] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -119,6 +122,8 @@ export default function ChatPage() {
     if (!storedUserId) { router.push("/Login"); return; }
     const uid = parseInt(storedUserId, 10);
     setUserId(uid);
+    setUsername(localStorage.getItem("username") || "");
+    setUserEmail(localStorage.getItem("userEmail") || "");
 
     // Restore last selected chat from session
     const storedChatId = sessionStorage.getItem("chatId");
@@ -537,34 +542,41 @@ export default function ChatPage() {
       >
         <div className={`flex flex-col h-full w-[260px] transition-opacity duration-300 ${sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
           
-          <div className="p-3">
-            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
-              onClick={createNewChat} disabled={startingChat}
-              className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-white/5 transition mb-1 text-white border border-transparent hover:border-white/5">
-              <div className="flex items-center gap-3">
-                <div className={`w-6 h-6 rounded-full bg-white/10 flex items-center justify-center`}>
-                  <Sparkles className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="font-medium text-sm">New chat</span>
-              </div>
-              <Plus className="w-4 h-4 text-gray-400" />
-            </motion.button>
-
-            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
+          {/* Top nav — same order as AppSidebar for smooth transitions */}
+          <div className="p-3 flex flex-col gap-0.5">
+            <button
               onClick={() => router.push("/Dashboard")}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-300 transition mb-1 hover:bg-white/5 border border-transparent hover:border-white/5">
-              <LayoutGrid className="w-4 h-4 ml-1" />
-              <span className="font-medium text-sm">Dashboard</span>
-            </motion.button>
-            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 text-sm font-medium transition hover:bg-white/5 hover:text-gray-200 border border-transparent hover:border-white/5">
+              <LayoutGrid className="w-4 h-4" />
+              Dashboard
+            </button>
+            {/* Chat — active */}
+            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/10 text-white text-sm font-medium border border-transparent">
+              <MessageSquare className={`w-4 h-4 text-[${ACCENT}]`} />
+              Chat
+            </div>
+            <button
               onClick={() => router.push("/quiz")}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-300 transition hover:bg-white/5 border border-transparent hover:border-white/5">
-              <GraduationCap className="w-4 h-4 ml-1" />
-              <span className="font-medium text-sm">Quiz</span>
-            </motion.button>
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 text-sm font-medium transition hover:bg-white/5 hover:text-gray-200 border border-transparent hover:border-white/5">
+              <GraduationCap className="w-4 h-4" />
+              Quiz
+            </button>
+            <button
+              onClick={() => router.push("/Profile")}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-gray-400 text-sm font-medium transition hover:bg-white/5 hover:text-gray-200 border border-transparent hover:border-white/5">
+              <User className="w-4 h-4" />
+              Profile
+            </button>
           </div>
 
-          <div className="px-3 pt-3 pb-2 border-t border-[#151515] mt-2">
+          {/* New chat + History */}
+          <div className="px-3 pt-3 pb-2 border-t border-white/[0.06] mt-1">
+            <motion.button whileHover={{ backgroundColor: "rgba(255,255,255,0.05)" }} whileTap={{ scale: 0.98 }}
+              onClick={createNewChat} disabled={startingChat}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl hover:bg-white/5 transition mb-3 text-white border border-white/[0.06] hover:border-white/10">
+              <span className="font-medium text-sm">New chat</span>
+              <Plus className="w-4 h-4 text-gray-400" />
+            </motion.button>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest px-2 mb-2 flex items-center justify-between">
               History
               <button onClick={() => userId && loadUserChats(userId)} disabled={loadingChats}
@@ -627,9 +639,66 @@ export default function ChatPage() {
             )}
           </div>
           
-          <div className="p-4 border-t border-[#151515] flex items-center gap-3">
-             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[oklch(64.6%_0.222_41.116)] to-[oklch(50%_0.15_30)] flex items-center justify-center shrink-0 shadow-lg" />
-             <span className="text-sm font-medium text-gray-200">Khoj Account</span>
+          {/* Profile popover */}
+          <div className="relative">
+            <AnimatePresence>
+              {showProfileMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 8, scale: 0.97 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute bottom-full left-3 right-3 mb-2 bg-[#141414] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                >
+                  {/* Profile header */}
+                  <div className="px-4 py-4 border-b border-white/[0.06]">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[oklch(64.6%_0.222_41.116)] to-[oklch(50%_0.15_30)] flex items-center justify-center shrink-0 shadow-lg text-white text-sm font-semibold">
+                        {username ? username.charAt(0).toUpperCase() : "K"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{username || "User"}</p>
+                        <p className="text-xs text-gray-500 truncate">{userEmail || "No email"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="p-2">
+                    <button
+                      onClick={() => { setShowProfileMenu(false); router.push("/Dashboard"); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 hover:bg-white/5 hover:text-white transition text-left"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+                      Dashboard
+                    </button>
+                    <button
+                      onClick={() => {
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        router.push("/");
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition text-left"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                      Log out
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Trigger button */}
+            <button
+              onClick={() => setShowProfileMenu((p) => !p)}
+              className="w-full p-4 border-t border-white/[0.06] flex items-center gap-3 hover:bg-white/[0.03] transition group"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[oklch(64.6%_0.222_41.116)] to-[oklch(50%_0.15_30)] flex items-center justify-center shrink-0 shadow-lg text-white text-xs font-semibold">
+                {username ? username.charAt(0).toUpperCase() : "K"}
+              </div>
+              <span className="flex-1 text-sm font-medium text-gray-200 text-left truncate">{username || "Khoj Account"}</span>
+              <svg className={`w-4 h-4 text-gray-500 transition-transform ${showProfileMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
+            </button>
           </div>
         </div>
       </motion.aside>
