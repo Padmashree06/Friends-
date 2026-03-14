@@ -78,7 +78,9 @@ if len(preferences) == 0 {
 		resources = []Resource{}
 	}
 
-	// 5. Store resources in DB
+	// 5. Clear old resources and store new ones
+	_, _ = config.DB.Exec("DELETE FROM chat_resources WHERE chat_id=$1", chatID)
+
 	for _, r := range resources {
 		_, err := config.DB.Exec(
 			`INSERT INTO chat_resources (chat_id, resource_title, resource_url, resource_type, resource_description, llm_explanation, created_at)
@@ -142,20 +144,54 @@ Return STRICT JSON:
 	Explanation string `json:"explanation"`
 }
 
-// CallGrokForResources calls Grok API and parses resources
+// CallGrokForResources calls Groq API and parses resources
 func CallGrokForResources(prompt, apiKey string) ([]Resource, error) {
-	model := "llama-3.1-70b-versatile"
+	// Try multiple models in order (same fallback strategy as chat)
+	models := []string{
+		"llama-3.3-70b-versatile",
+		"llama-3.1-70b-versatile",
+		"llama-3.1-8b-instant",
+		"mixtral-8x7b-32768",
+		"gemma2-9b-it",
+	}
+
+	var lastErr error
+	for _, model := range models {
+		resources, err := callGroqForResourcesWithModel(prompt, apiKey, model)
+		if err != nil {
+			fmt.Printf("[resources] Model %s failed: %v\n", model, err)
+			lastErr = err
+			continue
+		}
+		if len(resources) > 0 {
+			fmt.Printf("[resources] Model %s returned %d resources\n", model, len(resources))
+			return resources, nil
+		}
+		fmt.Printf("[resources] Model %s returned 0 resources, trying next model\n", model)
+	}
+
+	if lastErr != nil {
+		return []Resource{}, fmt.Errorf("all models failed, last error: %v", lastErr)
+	}
+	return []Resource{}, nil
+}
+
+func callGroqForResourcesWithModel(prompt, apiKey, model string) ([]Resource, error) {
 	url := "https://api.groq.com/openai/v1/chat/completions"
 	bodyObj := map[string]interface{}{
 		"model": model,
 		"messages": []interface{}{
 			map[string]interface{}{
-				"role": "user",
+				"role":    "system",
+				"content": "You are a helpful assistant that suggests learning resources. You MUST respond with valid JSON only, no extra text before or after. The JSON must have a top-level key called 'resources' containing an array of objects.",
+			},
+			map[string]interface{}{
+				"role":    "user",
 				"content": prompt,
 			},
 		},
 		"temperature": 0.7,
-		"max_tokens": 1024,
+		"max_tokens":  1024,
 	}
 	b, _ := json.Marshal(bodyObj)
 	req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(string(b)))
@@ -164,9 +200,18 @@ func CallGrokForResources(prompt, apiKey string) ([]Resource, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	// Check HTTP status
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errBody map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&errBody)
+		fmt.Printf("[resources] Groq API returned status %d for model %s: %v\n", resp.StatusCode, model, errBody)
+		return nil, fmt.Errorf("Groq API status %d for model %s", resp.StatusCode, model)
+	}
+
 	var parsed struct {
 		Choices []struct {
 			Message struct {
@@ -175,39 +220,58 @@ func CallGrokForResources(prompt, apiKey string) ([]Resource, error) {
 		} `json:"choices"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode Groq response: %w", err)
 	}
 	if len(parsed.Choices) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("no choices in Groq response")
 	}
+
+	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
+	fmt.Printf("[resources] Raw LLM response (first 500 chars): %.500s\n", content)
+
+	// Try direct JSON parse
 	var result struct {
 		Resources []Resource `json:"resources"`
 	}
-content := strings.TrimSpace(parsed.Choices[0].Message.Content)
-    if err := json.Unmarshal([]byte(content), &result); err != nil {
-        // Try extracting JSON object from text (e.g., chatbot text prepended)
-        start := strings.Index(content, "{\n \"resources\"")
-        if start == -1 {
-            start = strings.Index(content, "{\"resources\"")
-        }
-        if start >= 0 {
-            end := strings.LastIndex(content, "}")
-            if end > start {
-                candidate := content[start : end+1]
-                if err2 := json.Unmarshal([]byte(candidate), &result); err2 == nil {
-                    return result.Resources, nil
-                }
-            }
-        }
-
-        // If no JSON parse,ForResources return empty array and optional warning in logs
-        fmt.Printf("[warn] CallGrok: could not parse resources JSON; raw=%q; err=%v\n", content, err)
-        return []Resource{}, nil
-    }
-    if result.Resources == nil {
-        return []Resource{}, nil
+	if err := json.Unmarshal([]byte(content), &result); err == nil && len(result.Resources) > 0 {
+		return result.Resources, nil
 	}
-	return result.Resources, nil
+
+	// Try extracting JSON block from within text/markdown
+	// Look for the outermost { ... } that contains "resources"
+	startIdx := -1
+	for i, ch := range content {
+		if ch == '{' {
+			startIdx = i
+			break
+		}
+	}
+	if startIdx >= 0 {
+		// Find matching closing brace
+		braceCount := 0
+		endIdx := -1
+		for i := startIdx; i < len(content); i++ {
+			if content[i] == '{' {
+				braceCount++
+			} else if content[i] == '}' {
+				braceCount--
+				if braceCount == 0 {
+					endIdx = i
+					break
+				}
+			}
+		}
+		if endIdx > startIdx {
+			candidate := content[startIdx : endIdx+1]
+			if err2 := json.Unmarshal([]byte(candidate), &result); err2 == nil && len(result.Resources) > 0 {
+				return result.Resources, nil
+			}
+			fmt.Printf("[resources] JSON extraction failed on candidate: err=%v\n", json.Unmarshal([]byte(candidate), &result))
+		}
+	}
+
+	fmt.Printf("[warn] CallGrokForResources: could not parse resources from LLM output\n")
+	return []Resource{}, nil
 }
 
 // Handler to get stored resources

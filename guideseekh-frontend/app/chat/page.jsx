@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Bot, User, Sparkles, LayoutGrid, MessageSquare,
@@ -106,6 +106,9 @@ export default function ChatPage() {
   const [showResources, setShowResources] = useState(false);
   const [resources, setResources] = useState([]);
   const [isGeneratingResources, setIsGeneratingResources] = useState(false);
+  const [resourceError, setResourceError] = useState(false);
+  const resourcesLoadedForChatRef = useRef(null);
+  const resourceDebounceRef = useRef(null);
 
   // We use this to snap to bottom on exact new message
   const messagesEndRef = useRef(null);
@@ -147,26 +150,69 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  // Load resources from backend when a chat is active
+  const loadResources = useCallback(async (id, forceRefresh = false) => {
+    if (!id) return;
+    setResourceError(false);
+    setIsGeneratingResources(true);
+    try {
+      // If not forcing refresh, try to get already-cached resources from DB
+      if (!forceRefresh) {
+        const getRes = await fetch(`${apiBaseUrl}/api/chat/resources/${id}`);
+        const getData = await getRes.json();
+        if (getRes.ok && getData.resources && getData.resources.length > 0) {
+          setResources(getData.resources);
+          resourcesLoadedForChatRef.current = id;
+          setIsGeneratingResources(false);
+          return;
+        }
+      }
+
+      // No cached resources or forcing refresh: ask backend to generate them via Groq
+      const postRes = await fetch(`${apiBaseUrl}/api/chat/resources/${id}`, { method: "POST" });
+      const postData = await postRes.json();
+      if (postRes.ok && postData.resources && postData.resources.length > 0) {
+        setResources(postData.resources);
+        resourcesLoadedForChatRef.current = id;
+      } else {
+        console.warn("[Resources] Backend returned no resources:", postData);
+        setResources([]);
+        setResourceError(true);
+      }
+    } catch (err) {
+      console.error("[Resources] Failed to load resources:", err);
+      setResources([]);
+      setResourceError(true);
+    } finally {
+      setIsGeneratingResources(false);
+    }
+  }, [apiBaseUrl]);
+
+  // Debounced resource loading — waits 2s after messages stabilize
   useEffect(() => {
+    if (resourceDebounceRef.current) clearTimeout(resourceDebounceRef.current);
+
     if (chatId && messages.length > 0) {
-      const currentTopic = topic || "General";
-      setIsGeneratingResources(true);
-      
-      const timer = setTimeout(() => {
-        setResources([
-          { id: 1, title: `Getting Started with ${currentTopic}`, type: "article", icon: FileText, url: "#" },
-          { id: 2, title: `${currentTopic} Video Tutorial`, type: "video", icon: Video, url: "#" },
-          { id: 3, title: "Related Documentation", type: "link", icon: ExternalLink, url: "#" },
-          { id: 4, title: "Community Best Practices", type: "article", icon: FileText, url: "#" },
-        ]);
-        setIsGeneratingResources(false);
-      }, 1500);
-      return () => clearTimeout(timer);
+      // If switching chats, load immediately; otherwise debounce
+      if (resourcesLoadedForChatRef.current !== chatId) {
+        loadResources(chatId);
+      } else {
+        // Debounce re-generation for ongoing conversations
+        resourceDebounceRef.current = setTimeout(() => {
+          loadResources(chatId, true);
+        }, 3000);
+      }
     } else {
       setResources([]);
       setShowResources(false);
+      setResourceError(false);
+      resourcesLoadedForChatRef.current = null;
     }
-  }, [chatId, topic, messages.length]);
+
+    return () => {
+      if (resourceDebounceRef.current) clearTimeout(resourceDebounceRef.current);
+    };
+  }, [chatId, messages.length, loadResources]);
 
   useEffect(() => {
     if (textAreaRef.current) {
@@ -941,29 +987,47 @@ export default function ChatPage() {
                         </div>
                       ) : resources.length > 0 ? (
                         <div className="space-y-1">
-                          {resources.map((res) => {
-                            const IconObj = res.icon;
+                          {resources.map((res, i) => {
+                            const type = (res.resource_type || res.type || "").toLowerCase();
+                            const IconObj = type.includes("video") ? Video :
+                                            type.includes("doc") ? FileText :
+                                            ExternalLink;
+                            const title = res.resource_title || res.title || "Resource";
+                            const url = res.resource_url || res.url || "#";
+                            const description = res.resource_description || res.description || "";
+                            const explanation = res.llm_explanation || res.explanation || "";
+
                             return (
                               <a
-                                key={res.id}
-                                href={res.url}
-                                onClick={(e) => { e.preventDefault(); alert(`Opening resource: ${res.title}`); }}
+                                key={res.id || i}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="flex items-start gap-3 p-3 rounded-xl hover:bg-white/5 transition group"
                               >
-                                <div className="mt-0.5 p-1.5 rounded-lg bg-white/5 text-gray-400 group-hover:text-white transition">
+                                <div className="mt-0.5 p-1.5 rounded-lg bg-white/5 text-gray-400 group-hover:text-white transition shrink-0">
                                   <IconObj className="w-4 h-4" />
                                 </div>
-                                <div>
-                                  <p className="text-sm font-medium text-gray-200 group-hover:text-white transition line-clamp-2">{res.title}</p>
-                                  <span className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mt-1 block">{res.type}</span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-200 group-hover:text-white transition line-clamp-2">{title}</p>
+                                  {(description || explanation) && (
+                                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{description || explanation}</p>
+                                  )}
+                                  <span className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold mt-1 block">{type || "resource"}</span>
                                 </div>
                               </a>
                             );
                           })}
                         </div>
                       ) : (
-                        <div className="py-6 text-center text-gray-500 text-sm">
-                          No specific resources found.
+                        <div className="py-6 flex flex-col items-center justify-center text-gray-500 text-sm gap-3">
+                          <p>{resourceError ? "Failed to load resources." : "No specific resources found."}</p>
+                          <button
+                            onClick={() => loadResources(chatId, true)}
+                            className={`px-4 py-2 rounded-xl text-xs font-medium bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white transition`}
+                          >
+                            ↻ Retry
+                          </button>
                         </div>
                       )}
                     </div>
