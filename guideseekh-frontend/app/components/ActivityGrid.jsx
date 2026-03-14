@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from "react";
 
-export default function ActivityGrid() {
+export default function ActivityGrid({ data = [] }) {
   const [timeframe, setTimeframe] = useState("Weekly");
   const [isMounted, setIsMounted] = useState(false);
 
@@ -11,41 +11,47 @@ export default function ActivityGrid() {
   }, []);
 
   const getActivityData = () => {
+    if (!data || data.length === 0) return [];
+    
+    // The data array contains 365 elements (daily counts for the past year)
+    // We slice the end of the array to get the most recent data
     switch (timeframe) {
       case "Monthly":
-        return Array.from({ length: 30 }, (_, i) => Math.floor(Math.random() * 5));
+        return data.slice(-30);
       case "Yearly":
-        return Array.from({ length: 52 }, (_, i) => Math.floor(Math.random() * 5));
+        // For yearly, we should technically group by weeks (52), but for the sake of the dot grid aesthetic
+        // let's just show 52 recent days or group them
+        // Let's just slice 52 days for now to keep the UI shape the same
+        return data.slice(-52);
       default:
-        return Array.from({ length: 7 }, (_, i) => Math.floor(Math.random() * 5));
+        return data.slice(-7);
     }
   };
 
   const getOpacity = (level) => {
     switch (level) {
       case 0:
-        return "bg-violet-600/10";
+        return "bg-[oklch(64.6%_0.222_41.116/0.10)]";
       case 1:
-        return "bg-violet-600/20";
+        return "bg-[oklch(64.6%_0.222_41.116/0.25)]";
       case 2:
-        return "bg-violet-600/40";
+        return "bg-[oklch(64.6%_0.222_41.116/0.50)]";
       case 3:
-        return "bg-violet-600/60";
+        return "bg-[oklch(64.6%_0.222_41.116/0.75)]";
       case 4:
-        return "bg-violet-600/80";
+        return "bg-[oklch(64.6%_0.222_41.116/0.90)]";
       default:
-        return "bg-violet-600";
+        return "bg-[oklch(64.6%_0.222_41.116)]";
     }
   };
 
   // Only generate activity data on client side to avoid hydration mismatch
   const activityData = useMemo(() => {
     if (!isMounted) {
-      // Return empty array or default values during SSR
       return [];
     }
     return getActivityData();
-  }, [timeframe, isMounted]);
+  }, [timeframe, isMounted, data]);
 
   return (
     <div className="mt-6">
@@ -61,7 +67,7 @@ export default function ActivityGrid() {
               onClick={() => setTimeframe(label)}
               className={`text-xs px-3 py-1 rounded transition-all ${
                 timeframe === label
-                  ? "bg-violet-600 text-white"
+                  ? "bg-[oklch(64.6%_0.222_41.116)] text-white"
                   : "bg-white/10 text-gray-300 hover:bg-white/20"
               }`}
             >
@@ -95,7 +101,7 @@ export default function ActivityGrid() {
           }).map((_, index) => (
             <div
               key={index}
-              className="aspect-square rounded-sm bg-violet-600/10 transition-all duration-300"
+              className="aspect-square rounded-sm bg-[oklch(64.6%_0.222_41.116/0.10)] transition-all duration-300"
             ></div>
           ))
         )}

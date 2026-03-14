@@ -28,6 +28,8 @@ func RegisterRoutes(r *gin.Engine) {
 		r.POST("/quiz/whatsapp-trigger", handlers.WhatsAppTriggerQuiz)
 		r.POST("/webhook/whatsapp", handlers.WhatsAppWebhook)
 
+		api.GET("/dashboard/:user_id", handlers.GetDashboardData)
+
 		// Schedule endpoints
 		api.POST("/schedule", handlers.CreateSchedule)
 		api.GET("/schedule/:user_id", handlers.GetUserSchedules)
