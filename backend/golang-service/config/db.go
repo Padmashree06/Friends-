@@ -15,7 +15,7 @@ func ConnectDatabase() {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error laoding .env")
+		log.Println("Note: No .env file found. Falling back to system environment variables.")
 	}
 
 	ConnStr := os.Getenv("SUPABASE_DB_URL")
